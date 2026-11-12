@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--PAGE-->
+<title>CSTR Flow Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: sticky parameter rail on the left, results column on the right; one column on phones. */
+:root {
+  --is-dark: 0;
+  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #e9edf2; --plot-bg: #fbfcfe;
+  --ink: #121a23; --ink-2: #47525f; --ink-3: #6f7a88; --line: #d8dee6;
+  --accent: #1f6fd0; --accent-ink: #ffffff; --series-1: #2a78d6; --series-ref: #6f7a88;
+  --good: #14804f; --warn: #a36500; --crit: #c23434;
+  --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --is-dark: 1; color-scheme: dark;
+  --bg: #0e1319; --surface: #161d26; --surface-2: #202a35; --plot-bg: #121921;
+  --ink: #e8edf3; --ink-2: #b4becb; --ink-3: #8491a0; --line: #2a3542;
+  --accent: #4a94ea; --accent-ink: #07111d; --series-1: #3987e5; --series-ref: #8491a0;
+  --good: #45c08b; --warn: #e0a233; --crit: #f07070;
+} }
+:root[data-theme="dark"] {
+  --is-dark: 1; color-scheme: dark;
+  --bg: #0e1319; --surface: #161d26; --surface-2: #202a35; --plot-bg: #121921;
+  --ink: #e8edf3; --ink-2: #b4becb; --ink-3: #8491a0; --line: #2a3542;
+  --accent: #4a94ea; --accent-ink: #07111d; --series-1: #3987e5; --series-ref: #8491a0;
+  --good: #45c08b; --warn: #e0a233; --crit: #f07070;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-ui); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+h1 { font: 600 24px/1.2 var(--font-display); margin: 0; letter-spacing: -0.01em; }
+header.top p { margin: 0; color: var(--ink-2); max-width: 70ch; }
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+h2 { font: 600 17px/1.3 var(--font-display); margin: 0; text-wrap: balance; }
+h3 { font: 600 13px/1.3 var(--font-ui); margin: 0; }
+.muted { color: var(--ink-2); }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+/* parameter rail */
+.rail { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; }
+@media (min-width: 861px) { .rail { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); max-height: calc(100vh - 24px); overflow: auto; } }
+.rail fieldset { border: 0; border-bottom: 1px solid var(--line); margin: 0; padding: 12px 14px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; min-width: 0; }
+.rail legend { font: 600 11px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 0; margin-bottom: 8px; float: left; width: 100%; grid-column: 1 / -1; }
+.fld { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fld.wide { grid-column: 1 / -1; }
+.fld label { font-size: 12px; color: var(--ink-2); }
+.fld .ctl { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+.fld .ctl:focus-within { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.fld input, .fld select { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: var(--ink); font: 13px var(--font-num); padding: 6px 8px; outline: none; }
+.fld select { font-family: var(--font-ui); }
+.fld .unit { font-size: 11px; color: var(--ink-3); padding-right: 8px; white-space: nowrap; }
+.fld.bad .ctl { border-color: var(--crit); }
+.runbar { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; }
+button { font: 600 13px var(--font-ui); border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 12px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.ghost { background: transparent; }
+.row { display: flex; gap: 8px; } .row > * { flex: 1; }
+#stale { font-size: 12px; color: var(--warn); }
+
+/* results */
+.results { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+.status { display: flex; flex-direction: column; gap: 6px; }
+.status .line { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; color: var(--ink-2); }
+.bar { height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s linear; }
+.err { color: var(--crit); font-weight: 500; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.kpi { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi .k { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.kpi .v { font: 500 20px/1.25 var(--font-num); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi .v small { font-size: 12px; color: var(--ink-2); font-weight: 400; }
+.kpi .s { font-size: 12px; color: var(--ink-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.pill::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.pill.good::before { background: var(--good); } .pill.warning::before { background: var(--warn); border-radius: 1px; transform: rotate(45deg); } .pill.critical::before { background: var(--crit); border-radius: 1px; }
+section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+section > .lede { margin: 0; color: var(--ink-2); max-width: 75ch; }
+.figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+figure canvas { width: 100%; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+figcaption { font-size: 12px; color: var(--ink-2); }
+figcaption b { color: var(--ink); font-weight: 600; display: block; font-size: 13px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--series-1); vertical-align: middle; margin-right: 6px; }
+.legend i.ref { border-top: 2px dashed var(--series-ref); }
+.tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+td.n, th.n { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.note { border-left: 3px solid var(--line); padding: 2px 0 2px 12px; color: var(--ink-2); max-width: 75ch; margin: 0; }
+details { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 14px; }
+details summary { cursor: pointer; font-weight: 600; }
+details ul { margin: 10px 0 2px; padding-left: 18px; color: var(--ink-2); max-width: 80ch; display: flex; flex-direction: column; gap: 6px; }
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: var(--bg); font: 12px/1.45 var(--font-num); padding: 6px 9px; border-radius: 4px; white-space: pre; max-width: 90vw; }
+.dim { opacity: 0.45; transition: opacity 0.2s; }
+@media (prefers-reduced-motion: reduce) { .bar > i, .dim { transition: none; } }
+</style>
+<!--/HEAD-->
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>CSTR Flow Lab</h1>
+    <p>Axisymmetric CFD of a continuous stirred tank: flow field, residence time distribution and solids suspension from your tank, baffle, agitator and fluid settings.</p>
+  </header>
+  <div class="layout">
+    <form class="rail" id="form" autocomplete="off">
+      <div id="fields"></div>
+      <div class="runbar">
+        <span id="stale" hidden>Inputs changed since the last run.</span>
+        <div class="row">
+          <button type="submit" class="primary" id="run">Run simulation</button>
+          <button type="button" class="ghost" id="reset">Reset</button>
+        </div>
+      </div>
+    </form>
+    <div class="results">
+      <div class="status" aria-live="polite">
+        <div class="line"><span id="statusText">Starting…</span></div>
+        <div class="bar" id="bar"><i></i></div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+
+      <section id="secFlow">
+        <h2>Flow field</h2>
+        <p class="lede">Time-averaged velocities on a vertical cut through the tank axis. Lines follow the in-plane flow paths; arrowheads show direction. Hover a map for local values.</p>
+        <div class="figs" id="figs"></div>
+      </section>
+
+      <section id="secRtd">
+        <h2>Residence time distribution</h2>
+        <p class="lede" id="rtdVerdict"></p>
+        <div class="two">
+          <figure>
+            <div class="legend"><span><i></i>Simulated</span><span><i class="ref"></i>Ideal CSTR</span></div>
+            <canvas id="chE"></canvas>
+            <figcaption><b>Exit age distribution E(θ)</b>Fraction of feed leaving per unit dimensionless time, θ = t/τ.</figcaption>
+          </figure>
+          <figure>
+            <div class="legend"><span><i></i>Simulated</span><span><i class="ref"></i>Ideal CSTR</span></div>
+            <canvas id="chF"></canvas>
+            <figcaption><b>Cumulative distribution F(t), log time</b>Outlet response to a step change in the feed. The early part shows how fast feed first reaches the outlet.</figcaption>
+          </figure>
+        </div>
+        <div class="tblwrap"><table id="tblRtd"></table></div>
+      </section>
+
+      <section id="secSolids">
+        <h2>Solids settling and suspension</h2>
+        <p class="lede" id="solVerdict"></p>
+        <div class="two">
+          <figure>
+            <div class="legend"><span><i></i>Radially averaged solids</span><span><i class="ref"></i>Uniform suspension</span></div>
+            <canvas id="chS"></canvas>
+            <figcaption><b>Axial solids profile</b>Local concentration relative to the tank average, against height above the bottom.</figcaption>
+          </figure>
+          <div class="tblwrap"><table id="tblSol"></table></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Model and assumptions</h2>
+        <details>
+          <summary>What is solved, and what is inferred</summary>
+          <ul>
+            <li><b>Flow.</b> Incompressible Navier–Stokes with swirl on a 2-D axisymmetric (r, z) grid: van Leer advection, projection method with a direct pressure solve, mixing-length eddy viscosity and a power-law wall function. The liquid surface is flat and free-slip; the tank bottom is flat.</li>
+            <li><b>Impeller and baffles.</b> Blades are a blade-element momentum source in the swept volume, so radial or axial pumping follows from blade angle and rotation. Baffles are a drag on swirl in the annulus they occupy. Blade-to-blade and baffle-to-baffle detail, trailing vortices and surface vortexing are averaged out. Power and pumping numbers come from the solved field and typically land within about 30% of published values.</li>
+            <li><b>Feed and outlet.</b> In an axisymmetric model the feed is a ring at the liquid surface and a side outlet is a slot around the wall, so feed-jet momentum is understated.</li>
+            <li><b>RTD and age.</b> A tracer step is transported on the frozen mean flow with turbulent diffusivity ν<sub>t</sub>/0.8 (first-order upwind, implicit in time). The mean of the simulated distribution is checked against V/Q.</li>
+            <li><b>Solids.</b> Particles are not tracked. Terminal velocity uses Schiller–Naumann drag, hindered settling uses Richardson–Zaki, and the concentration map is a drift-flux balance (settling against turbulent dispersion) at the stated loading. The just-suspended speed is Zwietering's correlation with a geometry constant S estimated from impeller type, D/T and clearance. Solids do not feed back on the liquid flow.</li>
+            <li><b>Use.</b> Screening and comparison of design options. Confirm critical designs with 3-D CFD or tests.</li>
+          </ul>
+        </details>
+      </section>
+    </div>
+  </div>
+</div>
+<div id="tip" hidden></div>
+<script src="js/solver.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
