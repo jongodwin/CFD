@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--HEAD-->
+<title>Mass Balance Reconciler</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<!--/HEAD-->
+</head>
+<body>
+<!--BODY-->
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Mass Balance Reconciler</h1>
+      <p>Least-squares reconciliation of plant sampling data</p>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn" id="btn-project">Project file</button>
+      <button type="button" class="btn primary" id="btn-run">Reconcile</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tabbtn-setup" data-tab="setup">Setup</button>
+    <button type="button" role="tab" id="tabbtn-flowsheet" data-tab="flowsheet">Flowsheet</button>
+    <button type="button" role="tab" id="tabbtn-data" data-tab="data">Sample data</button>
+    <button type="button" role="tab" id="tabbtn-results" data-tab="results">Results</button>
+  </nav>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <section id="tab-setup" class="tab" hidden></section>
+    <section id="tab-flowsheet" class="tab" hidden></section>
+    <section id="tab-data" class="tab" hidden></section>
+    <section id="tab-results" class="tab" hidden></section>
+  </main>
+
+  <div id="dialog" class="dialog-wrap" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <h2 id="dialog-title">Project file</h2>
+      <p class="hint">Everything you enter (network, options, sample data) is one JSON document. Copy or download it to keep it; paste or open one to restore it. Your work is also kept in this browser between visits.</p>
+      <textarea id="project-text" spellcheck="false" aria-label="Project JSON"></textarea>
+      <p id="dialog-msg" class="hint" role="status"></p>
+      <div class="row">
+        <button type="button" class="btn" id="project-copy">Copy</button>
+        <button type="button" class="btn" id="project-download">Download</button>
+        <label class="btn" for="project-file">Open file…</label>
+        <input type="file" id="project-file" accept=".json,application/json" class="visually-hidden">
+        <button type="button" class="btn" id="project-apply">Load pasted text</button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="project-example">Load the example circuit</button>
+        <button type="button" class="btn danger" id="project-blank">Start a blank project</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn primary" id="dialog-close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/solver.js"></script>
+<script src="js/example.js"></script>
+<script src="js/app.js"></script>
+<!--/BODY-->
+</body>
+</html>
