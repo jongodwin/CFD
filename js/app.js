@@ -624,10 +624,22 @@
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => { statusEl.textContent = okMsg; }, fallback);
     else fallback();
   }
-  function download(name, text, type) {
-    const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  // In a published Claude artifact, files are saved through the viewer's "downloads"
+  // capability; anywhere else an ordinary browser download is used.
+  const savePort = window.claude && typeof window.claude.use === 'function'
+    ? Promise.resolve().then(() => window.claude.use('downloads')).catch(() => null) : Promise.resolve(null);
+  async function download(name, data, type, statusEl) {
+    const say = (msg) => { if (statusEl) statusEl.textContent = msg; };
+    const port = await savePort;
+    if (port) {
+      try { await port.save({ filename: name, data: data instanceof ArrayBuffer ? data.slice(0) : data }); say('Saved ' + name + '.'); }
+      catch (e) { say(e && e.code === 'declined' ? 'Save cancelled.' : 'The file could not be saved in this view.'); }
+      return;
+    }
+    const a = h('a', { href: URL.createObjectURL(new Blob([data], { type })), download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    say('Downloading ' + name + '.');
   }
 
   function renderResults() {
@@ -655,7 +667,8 @@
       h('header', {}, h('h2', {}, 'Fit summary'),
         h('div', { class: 'row' }, status,
           h('button', { type: 'button', class: 'btn small', id: 'res-copy', onclick: () => copyText(resultsText('\t'), status, 'Copied. Paste into a spreadsheet.') }, 'Copy table'),
-          h('button', { type: 'button', class: 'btn small', id: 'res-csv', onclick: () => download('mass-balance-results.csv', resultsText(','), 'text/csv') }, 'Download CSV'))),
+          h('button', { type: 'button', class: 'btn small', id: 'res-xlsx', onclick: openExcel }, 'Excel…'),
+          h('button', { type: 'button', class: 'btn small', id: 'res-csv', onclick: () => download('mass-balance-results.csv', resultsText(','), 'text/csv', status) }, 'Download CSV'))),
       h('div', { class: 'stats' },
         stat('Weighted sum of squares', fmt(R.chi2, 4)),
         stat('Redundancy (degrees of freedom)', String(R.dof)),
@@ -719,6 +732,7 @@
     state = normalise(p);
     result = null; stale = false; runErrors = null; ui.selected = null; ui.mode = 'select'; ui.pending = null;
     save();
+    if (msg == null) { render(); return; }
     $('project-text').value = JSON.stringify(state, null, 1);
     $('dialog-msg').textContent = msg;
     render();
@@ -730,6 +744,47 @@
     replaceProject(p, 'Project loaded.');
   }
 
+  // ---------- Excel dialog ----------
+  const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  function xlMessage(cls, text, notes) {
+    const box = $('xl-msg');
+    box.replaceChildren();
+    if (text) box.append(h('p', { class: cls }, text));
+    if (notes && notes.length) box.append(h('ul', {}, notes.map((n) => h('li', {}, n))));
+  }
+  function openExcel() {
+    const fresh = result && !stale;
+    $('xl-export-hint').textContent = 'The node network and sample data' + (fresh ? ', plus the reconciled values and their standard deviations on separate output sheets.'
+      : result ? '. The results are out of date and will be left out: press Reconcile first to include them.' : '. Press Reconcile first to include results.')
+      + ' The file can be imported again later.';
+    xlMessage();
+    $('xl-dialog').hidden = false;
+    $('xl-template').focus();
+  }
+  async function excelSave(template) {
+    const lib = window.ExcelJS, X = window.MassBalanceExcel;
+    if (!lib || !X) { xlMessage('err', 'The Excel library did not load. Check your connection and reload the page.'); return; }
+    if (!state.streams.length) { xlMessage('err', 'Add streams on the Flowsheet tab first, so the workbook has rows to fill in.'); return; }
+    try {
+      const sheets = X.buildSheets(state, template || stale ? null : result, { template });
+      const buf = await X.writeWorkbook(lib, sheets);
+      const status = h('p', { class: 'ok' });
+      $('xl-msg').replaceChildren(status);
+      await download(template ? 'mass-balance-template.xlsx' : 'mass-balance.xlsx', buf, XLSX_TYPE, status);
+    } catch (e) { xlMessage('err', 'The workbook could not be created: ' + e.message); }
+  }
+  async function excelImport(file) {
+    const lib = window.ExcelJS, X = window.MassBalanceExcel;
+    if (!lib || !X) { xlMessage('err', 'The Excel library did not load. Check your connection and reload the page.'); return; }
+    let sheets;
+    try { sheets = await X.readWorkbook(lib, await file.arrayBuffer()); }
+    catch (e) { xlMessage('err', `"${file.name}" could not be read as an .xlsx workbook. Older .xls files need saving as .xlsx first.`); return; }
+    const res = X.applySheets(sheets, state, { network: $('xl-network').checked });
+    if (!res.ok) { xlMessage('err', 'Nothing was imported.', res.messages); return; }
+    replaceProject(res.project, null);
+    xlMessage('ok', res.summary, res.messages);
+  }
+
   // ---------- wiring ----------
   function init() {
     state = load();
@@ -738,10 +793,16 @@
     document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
     $('btn-run').addEventListener('click', run);
     $('btn-project').addEventListener('click', openDialog);
+    $('btn-excel').addEventListener('click', openExcel);
+    $('xl-close').addEventListener('click', () => { $('xl-dialog').hidden = true; });
+    $('xl-dialog').addEventListener('pointerdown', (e) => { if (e.target === $('xl-dialog')) $('xl-dialog').hidden = true; });
+    $('xl-template').addEventListener('click', () => excelSave(true));
+    $('xl-export').addEventListener('click', () => excelSave(false));
+    $('xl-file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) excelImport(f); });
     $('dialog-close').addEventListener('click', () => { $('dialog').hidden = true; });
     $('dialog').addEventListener('pointerdown', (e) => { if (e.target === $('dialog')) $('dialog').hidden = true; });
     $('project-copy').addEventListener('click', () => copyText($('project-text').value, $('dialog-msg'), 'Project copied.'));
-    $('project-download').addEventListener('click', () => download('mass-balance-project.json', $('project-text').value, 'application/json'));
+    $('project-download').addEventListener('click', () => download('mass-balance-project.json', $('project-text').value, 'application/json', $('dialog-msg')));
     $('project-apply').addEventListener('click', () => loadText($('project-text').value));
     $('project-file').addEventListener('change', (e) => {
       const f = e.target.files[0];
@@ -756,7 +817,8 @@
     document.addEventListener('keydown', (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
       if (e.key === 'Escape') {
-        if (!$('dialog').hidden) $('dialog').hidden = true;
+        if (!$('xl-dialog').hidden) $('xl-dialog').hidden = true;
+        else if (!$('dialog').hidden) $('dialog').hidden = true;
         else if (ui.mode === 'stream') { ui.mode = 'select'; ui.pending = null; if (tab === 'flowsheet') renderFlowsheet(); }
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && tab === 'flowsheet' && ui.selected) { e.preventDefault(); deleteSelected(); }
     });

@@ -157,3 +157,9 @@ table.res td.warn .m, table.res td.crit .m { color: inherit; }
 .dialog textarea { width: 100%; height: 220px; font: 12px var(--font-data); resize: vertical; }
 
 @media (prefers-reduced-motion: no-preference) { .btn, .tabs button { transition: border-color 0.12s, background 0.12s; } }
+.xl-block { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+#xl-msg { display: flex; flex-direction: column; gap: 6px; }
+#xl-msg:empty { display: none; }
+#xl-msg p.ok { color: var(--good); font-weight: 500; }
+#xl-msg p.err { color: var(--crit); font-weight: 500; }
+#xl-msg ul { margin: 0; padding-left: 20px; color: var(--warn); font-size: 13px; }
