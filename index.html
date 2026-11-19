@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rotary Kiln Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a sticky control bar over a two-pane workbench. Inputs live in a tabbed rail on the left,
+   results (kiln schematic, key figures, axial profiles, balances) fill the canvas on the right. */
+:root {
+  --bg: #eceff2;
+  --surface: #fbfcfd;
+  --surface-2: #f2f4f7;
+  --ink: #141a20;
+  --ink-2: #46515d;
+  --muted: #6f7a86;
+  --line: #d5dae0;
+  --grid: #e6e9ed;
+  --axis: #b6bdc6;
+  --accent: #b5420e;
+  --accent-hover: #963609;
+  --accent-ink: #ffffff;
+  --accent-wash: #f5e3d8;
+  --good: #1d7531;
+  --warn: #855600;
+  --bad: #b02222;
+  --warn-wash: #faf0da;
+  --bad-wash: #fae3e3;
+  --band-flame: rgba(235, 104, 52, 0.11);
+  --band-chain: rgba(98, 80, 214, 0.08);
+  --kiln-shell: #8c96a1;
+  --kiln-lining: #d9c9bb;
+  --kiln-bed: #b49a7d;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 6px;
+  --bar-h: 56px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1114; --surface: #151a1f; --surface-2: #1b2127; --ink: #e6eaee; --ink-2: #b3bdc7; --muted: #828d98;
+    --line: #2a323a; --grid: #232a31; --axis: #3b444d;
+    --accent: #f07a3f; --accent-hover: #ff935d; --accent-ink: #1b0c03; --accent-wash: #3a2216;
+    --good: #4cc463; --warn: #e3b04b; --bad: #f07272; --warn-wash: #33290f; --bad-wash: #3a1b1b;
+    --band-flame: rgba(240, 122, 63, 0.14); --band-chain: rgba(144, 133, 233, 0.12);
+    --kiln-shell: #6c7782; --kiln-lining: #5e5046; --kiln-bed: #8d7458;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #0ca30c; --series-7: #9085e9; --series-8: #e66767;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1114; --surface: #151a1f; --surface-2: #1b2127; --ink: #e6eaee; --ink-2: #b3bdc7; --muted: #828d98;
+  --line: #2a323a; --grid: #232a31; --axis: #3b444d;
+  --accent: #f07a3f; --accent-hover: #ff935d; --accent-ink: #1b0c03; --accent-wash: #3a2216;
+  --good: #4cc463; --warn: #e3b04b; --bad: #f07272; --warn-wash: #33290f; --bad-wash: #3a1b1b;
+  --band-flame: rgba(240, 122, 63, 0.14); --band-chain: rgba(144, 133, 233, 0.12);
+  --kiln-shell: #6c7782; --kiln-lining: #5e5046; --kiln-bed: #8d7458;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #0ca30c; --series-7: #9085e9; --series-8: #e66767;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 14px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 30; background: var(--surface);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; }
+
+/* ---- control bar ---- */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; min-height: var(--bar-h);
+}
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+.brand svg { flex: none; }
+.brand h1 { font-size: 19px; letter-spacing: 0.01em; white-space: nowrap; }
+.brand .case-name { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); }
+a.btn { text-decoration: none; color: var(--ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.small { height: 28px; padding: 0 10px; font-size: 13px; }
+.btn[disabled] { opacity: 0.55; cursor: default; }
+select.preset { height: 34px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); padding: 0 8px; max-width: 260px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.status {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; min-width: 0;
+}
+.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.status[data-state="ok"] .dot { background: var(--good); }
+.status[data-state="warn"] .dot { background: var(--warn); }
+.status[data-state="error"] .dot { background: var(--bad); }
+.status[data-state="busy"] .dot { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.status[data-state="stale"] .dot { background: var(--warn); }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .status[data-state="busy"] .dot { animation: none; } }
+
+/* ---- workbench ---- */
+.bench {
+  display: grid; grid-template-columns: minmax(340px, 410px) minmax(0, 1fr); gap: 16px;
+  padding-block: 16px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  align-items: start;
+}
+.rail {
+  position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--bar-h) + 16px);
+  max-height: calc(100vh - var(--bar-h) - 32px - env(safe-area-inset-top, 0px));
+  display: flex; flex-direction: column; min-width: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); flex: none; scrollbar-width: thin; }
+.tab {
+  flex: 1 0 auto; border: 0; background: none; padding: 10px 12px; cursor: pointer; color: var(--ink-2);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; font-size: 13px;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:hover { color: var(--ink); }
+.panes { overflow-y: auto; padding: 4px 14px 16px; min-height: 0; }
+.pane[hidden] { display: none; }
+fieldset { border: 0; margin: 0; padding: 12px 0 4px; border-bottom: 1px solid var(--grid); min-width: 0; }
+fieldset:last-child { border-bottom: 0; }
+legend { font-family: var(--font-display); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); padding: 0; margin-bottom: 6px; }
+.hint { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem; align-items: center; gap: 8px; padding: 3px 0; }
+.field > label { color: var(--ink); font-size: 13px; }
+.field > label small { display: block; color: var(--muted); font-size: 11.5px; }
+.inp { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); overflow: hidden; }
+.inp:focus-within { border-color: var(--accent); }
+.inp input, .inp select { border: 0; background: transparent; padding: 5px 7px; width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+.inp input:focus, .inp select:focus { outline: none; }
+.inp .u { padding: 5px 7px 5px 0; color: var(--muted); font-size: 12px; white-space: nowrap; align-self: center; }
+.inp.invalid { border-color: var(--bad); }
+select.full, .inp select { cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; width: 100%; }
+.seg button { flex: 1; border: 0; background: var(--surface); padding: 6px 4px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--ink); font-weight: 600; }
+.field.wide { grid-template-columns: 1fr; }
+
+/* editable tables (species, layers) */
+.tbl-wrap { overflow-x: auto; margin: 4px 0 8px; border: 1px solid var(--line); border-radius: 5px; }
+table.edit { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+table.edit th { text-align: left; font-weight: 500; color: var(--muted); padding: 5px 6px; background: var(--surface-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.edit td { padding: 2px 3px; border-bottom: 1px solid var(--grid); }
+table.edit tr:last-child td { border-bottom: 0; }
+table.edit input, table.edit select { width: 100%; min-width: 4.2rem; border: 1px solid transparent; background: transparent; padding: 4px 5px; border-radius: 4px; }
+table.edit input:hover { border-color: var(--grid); }
+table.edit input:focus { border-color: var(--accent); outline: none; background: var(--surface); }
+table.edit input.name { min-width: 6rem; font-weight: 500; }
+table.edit td.ro { color: var(--muted); padding: 4px 6px; white-space: nowrap; }
+table.edit tfoot td { color: var(--ink-2); padding: 5px 6px; background: var(--surface-2); }
+.icon-btn { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 4px; line-height: 1; }
+.icon-btn:hover { color: var(--bad); background: var(--bad-wash); }
+.row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px; }
+.row-actions select { height: 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); padding: 0 6px; font-size: 13px; }
+.sum-ok { color: var(--good); }
+.sum-bad { color: var(--warn); }
+
+/* reactions */
+.rx { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px 6px; margin: 8px 0; background: var(--surface); }
+.rx.off { opacity: 0.6; }
+.rx-head { display: flex; align-items: center; gap: 8px; }
+.rx-head input.rx-name { flex: 1; min-width: 0; border: 1px solid transparent; background: transparent; font-weight: 600; padding: 3px 4px; border-radius: 4px; }
+.rx-head input.rx-name:focus { border-color: var(--accent); outline: none; }
+.rx .eqn { font-family: var(--font-mono); font-size: 13px; }
+.rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 6px; }
+.rx-grid .field { grid-template-columns: minmax(0, 1fr) 7.6rem; }
+.rx-msg { font-size: 12px; margin: 4px 0 2px; color: var(--muted); }
+.rx-msg.err { color: var(--bad); }
+.rx-msg.warn { color: var(--warn); }
+
+/* ---- results canvas ---- */
+.canvas { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.card > h2 { font-size: 15px; margin-bottom: 8px; }
+.schematic-card { padding: 12px 16px 8px; }
+.schematic-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.schematic-head h2 { font-size: 15px; }
+.schematic-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+#schematic { width: 100%; display: block; margin-top: 6px; }
+#schematic text { font-family: var(--font-ui); }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.kpi { background: var(--surface); padding: 10px 14px 12px; min-width: 0; }
+.kpi .k-label { font-size: 12px; color: var(--ink-2); }
+.kpi .k-value { font-size: 22px; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+.kpi .k-value small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.kpi .k-note { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+.messages { display: flex; flex-direction: column; gap: 8px; }
+.messages:empty { display: none; }
+.msg { border-radius: var(--radius); padding: 9px 12px; font-size: 13px; display: flex; gap: 8px; align-items: flex-start; }
+.msg.warn { background: var(--warn-wash); color: var(--ink); }
+.msg.error { background: var(--bad-wash); color: var(--ink); }
+.msg .tag { font-weight: 600; flex: none; }
+.msg.warn .tag { color: var(--warn); }
+.msg.error .tag { color: var(--bad); }
+.msg ul { margin: 0; padding-left: 18px; }
+
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.chart { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px 8px; min-width: 0; }
+.chart-head { display: flex; flex-direction: column; gap: 1px; }
+.chart-title { font-size: 14.5px; }
+.chart-sub { margin: 0; color: var(--muted); font-size: 12px; min-height: 1em; }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 4px; margin: 6px 0 2px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--ink-2); }
+.legend-item:hover { background: var(--surface-2); }
+.legend-item[aria-pressed="false"] { opacity: 0.45; }
+.legend-item[aria-pressed="false"] span:last-child { text-decoration: line-through; }
+.swatch { width: 14px; height: 3px; border-radius: 2px; background: var(--c); flex: none; }
+.swatch.dashed { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
+.plot { position: relative; touch-action: pan-y; border-radius: 4px; }
+.plot-svg { display: block; overflow: visible; }
+.plot-svg .grid { stroke: var(--grid); stroke-width: 1; }
+.plot-svg .axis { stroke: var(--axis); stroke-width: 1; }
+.plot-svg .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.plot-svg .unit { fill: var(--ink-2); font-size: 11px; font-weight: 500; }
+.plot-svg .axis-label { fill: var(--ink-2); font-size: 11.5px; }
+.plot-svg .end-label { fill: var(--muted); font-size: 11px; }
+.plot-svg .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.plot-svg .line.emph { stroke-width: 2.5; }
+.plot-svg .line.dashed { stroke-dasharray: 5 4; }
+.plot-svg .band-flame { fill: var(--band-flame); }
+.plot-svg .band-chain { fill: var(--band-chain); }
+.plot-svg .band-label { fill: var(--muted); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+.plot-svg .crosshair { stroke: var(--ink-2); stroke-width: 1; opacity: 0.5; }
+.plot-svg .dot { stroke: var(--surface); stroke-width: 2; }
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 12px; min-width: 150px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+.tip-head { color: var(--muted); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.tip-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 7px; }
+.tip-val { font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
+
+.balances { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+table.data { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.data th, table.data td { padding: 4px 6px; border-bottom: 1px solid var(--grid); text-align: right; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data thead th { color: var(--muted); font-weight: 500; font-size: 12px; border-bottom-color: var(--line); }
+table.data tr.group td { color: var(--ink-2); font-weight: 600; padding-top: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+table.data tr.total td { font-weight: 600; border-top: 1px solid var(--line); }
+table.data tr.closure td { color: var(--muted); }
+.table-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid var(--line); border-radius: 5px; }
+.table-scroll table.data thead th { position: sticky; top: 0; background: var(--surface-2); }
+details.profile > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+details.profile[open] > summary { margin-bottom: 10px; }
+.profile-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.notes { color: var(--ink-2); font-size: 13px; }
+.notes p { margin: 6px 0; max-width: 75ch; }
+.notes ul { margin: 6px 0; padding-left: 18px; max-width: 75ch; }
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); z-index: 40; display: grid; place-items: center; padding: 16px; }
+.dialog { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; width: min(620px, 100%); max-height: 90vh; display: flex; flex-direction: column; gap: 10px; }
+.dialog textarea { width: 100%; min-height: 280px; font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); padding: 8px; resize: vertical; }
+.dialog .row-actions { justify-content: flex-end; }
+.jump { display: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 1180px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) {
+  .bar { position: static; }
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; max-height: none; order: 2; scroll-margin-top: 12px; }
+  .canvas { order: 1; }
+  .panes { overflow: visible; }
+  .jump { display: inline-flex; }
+}
+@media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) {
+  .field { grid-template-columns: minmax(0, 1fr) 8.4rem; }
+  .rx-grid { grid-template-columns: 1fr; }
+  .brand h1 { font-size: 17px; }
+  .bar-controls { width: 100%; }
+  select.preset { flex: 1; max-width: none; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <svg width="34" height="22" viewBox="0 0 34 22" aria-hidden="true">
+      <rect x="1" y="4" width="28" height="14" rx="2" fill="none" stroke="var(--ink-2)" stroke-width="1.6"/>
+      <path d="M2.5 13.5 Q15 11 27.5 15.5 V16.5 H2.5 Z" fill="var(--kiln-bed)"/>
+      <path d="M29 11 L33 9 V13 Z" fill="var(--accent)"/>
+      <path d="M27.5 11 Q22 9.5 18 11 Q22 12.5 27.5 11 Z" fill="var(--accent)" opacity="0.8"/>
+    </svg>
+    <div style="min-width:0">
+      <h1>Rotary Kiln Simulator</h1>
+      <div class="case-name" id="caseName"></div>
+    </div>
+  </div>
+  <div class="bar-controls">
+    <label class="sr" for="presetSelect">Example case</label>
+    <select id="presetSelect" class="preset"></select>
+    <button type="button" class="btn" id="caseBtn">Case file</button>
+    <label class="toggle" for="autoRun"><input type="checkbox" id="autoRun" checked> Auto-run</label>
+    <button type="button" class="btn primary" id="runBtn">Run</button>
+    <a class="btn jump" href="#inputs">Edit inputs</a>
+  </div>
+  <div class="status" id="status" data-state="idle" role="status" aria-live="polite"><span class="dot"></span><span id="statusText">Ready</span></div>
+</header>
+
+<main class="bench">
+  <aside class="rail" id="inputs" aria-label="Inputs">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="panes" id="panes"></div>
+  </aside>
+
+  <section class="canvas" aria-label="Results">
+    <div class="card schematic-card">
+      <div class="schematic-head">
+        <h2>Kiln arrangement</h2>
+        <p id="schematicNote"></p>
+      </div>
+      <svg id="schematic" role="img" aria-label="Kiln schematic"></svg>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="messages" id="messages"></div>
+    <div class="charts" id="charts"></div>
+    <div class="balances" id="balances"></div>
+    <details class="card profile" id="profileCard">
+      <summary>Profile data table</summary>
+      <div class="profile-actions">
+        <button type="button" class="btn small" id="copyCsv">Copy CSV</button>
+        <button type="button" class="btn small" id="downloadCsv">Download CSV</button>
+        <span class="hint" id="csvNote"></span>
+      </div>
+      <div class="table-scroll" id="profileTable"></div>
+    </details>
+    <details class="card notes">
+      <summary style="cursor:pointer;font-family:var(--font-display);font-weight:600;font-size:15px">How the model works</summary>
+      <p>The kiln is divided into axial cells. Each cell holds a well-mixed slice of the bed and of the freeboard gas. Solids always move from the feed end to the discharge end; the gas moves with them (co-current) or against them (counter-current). For every cell the model solves energy balances for the bed, the gas, the inner wall and the steel shell, plus a molar balance for every species.</p>
+      <ul>
+        <li><b>Radiation</b> uses a grey-gas enclosure of gas, exposed wall and bed surface. Inside the flame the gas emissivity rises to the flame emissivity, so the flame radiates to the wall and the bed.</li>
+        <li><b>Burner</b> heat is released along the flame length with the chosen profile; fuel and combustion air enter at the gas inlet end. Fuel is burnt on its lower heating value.</li>
+        <li><b>Convection</b> between gas, wall and bed uses Tscheng &amp; Watkinson, a pipe-flow correlation, or fixed coefficients. The covered wall passes heat to the bed by contact (penetration theory or a fixed coefficient). Chains or lifters add a volumetric gas–solids coefficient over a chosen zone.</li>
+        <li><b>Wall losses</b> pass by conduction through the lining layers and leave the shell by convection (natural plus wind) and radiation.</li>
+        <li><b>Reactions</b> follow Arrhenius kinetics, zero or first order in the key reactant mass fraction: dw/dt = −k·wⁿ with k = A·exp(−Ea/RT). Reaction heat is applied at 25 °C and species carry their sensible heat between phases, so the energy balance closes exactly.</li>
+        <li><b>Bed depth</b> comes from the Kramers equation (slope, speed, angle of repose, discharge dam) or from a fixed fill fraction.</li>
+      </ul>
+      <p>The steady state is found by marching a start-up transient with physical hold-ups to convergence with Newton's method. All enthalpies are referred to 25 °C.</p>
+    </details>
+  </section>
+</main>
+
+<script src="js/kiln-model.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
